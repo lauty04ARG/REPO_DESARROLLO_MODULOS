@@ -45,17 +45,11 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 # ── 1 · Autenticación (resuelto — referencia del módulo 04) ────────────────
 
-
 def get_current_user(
     request: Request,
     credentials: Annotated[dict | None, Depends(bearer_scheme)],
 ) -> User:
-    """Quién sos: decodifica el JWT y carga el usuario desde storage.
-
-    - Token ausente / inválido / expirado / usuario inexistente → 401.
-    - Usuario cargado → se guarda el payload en `request.state.token_payload`
-      para que require_scope (que sí lee del token) lo tenga a mano.
-    """
+    """Quién sos: decodifica el JWT y carga el usuario desde storage."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Credenciales inválidas",
@@ -74,79 +68,59 @@ def get_current_user(
     if user is None:
         raise credentials_exception
 
-    # El payload del token queda accesible para las dependencias que
-    # autorizan por SCOPE. El rol, en cambio, se relee del usuario fresco.
     request.state.token_payload = payload
     return user
 
 
-# ── 2 · Autorización por ROL (🔓 COMPLETÁS VOS) ────────────────────────────
-
+# ── 2 · Autorización por ROL ────────────────────────────
 
 def require_role(required: Role) -> Callable:
-    """Factory de dependencia: exige que el usuario tenga `required` (o 403).
-
-    Uso en los endpoints:
-        current_user: User = Depends(require_role(Role.ADMIN))
-
-    🔴 ESTADO ACTUAL (VULNERABLE): devuelve al usuario sin verificar el rol.
-    Si corrés el script de verificación ahora, los checks de "gestionar
-    usuarios → 403" van a fallar porque CUALQUIER autenticado pasa acá.
-
-    ✅ COMPLETALO:
-        1. Compará `current_user.role` con `required`. ¿Coinciden?
-           NO → lanzá HTTPException 403 con un detail claro
-                ("No tenés el rol necesario para esta operación").
-           SÍ → devolvé `current_user` (los endpoints lo usan).
-    """
+    """Factory de dependencia: exige que el usuario tenga `required` (o 403)."""
     def checker(
         current_user: Annotated[User, Depends(get_current_user)],
     ) -> User:
-        # ─────────────────────────────────────────────────────────────
-        # 🔓 TU CÓDIGO ACÁ (reemplaza/envolvé el return de abajo):
-        #    if current_user.role != required:
-        #        raise HTTPException(status_code=403, detail=...)
-        # ─────────────────────────────────────────────────────────────
+        # viej
+        # return current_user
+        # (Dejaba pasar a cualquiera sin importar su nivel de acceso)
+
+        # AUTORIZACION POR ROL
+        # Comparamos el rol exigido por el endpoint con el rol real del usuario.
+        # Defensa: El rol se relee de la base de datos en cada request para que 
+        # cualquier cambio (ej. degradar a un admin) aplique de forma inmediata.
+        if current_user.role != required:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes el rol necesario para esta operacion."
+            )
+        
         return current_user
     return checker
 
 
-# ── 3 · Autorización por SCOPE del token (🔓 COMPLETÁS VOS) ────────────────
-
+# ── 3 · Autorización por SCOPE del token ────────────────
 
 def require_scope(required: str) -> Callable:
-    """Factory de dependencia: exige que el TOKEN tenga `required` en su scope.
-
-    Uso en los endpoints:
-        current_user: User = Depends(require_scope("write"))
-
-    🧠 La diferencia con require_role:
-        - Un ADMIN que logueó con scope "read" (token de integración de solo
-          lectura) NO puede crear documentos aunque sea admin. El scope se
-          lee del TOKEN (request.state.token_payload), no del usuario.
-
-    🔴 ESTADO ACTUAL (VULNERABLE): no valida nada.
-
-    ✅ COMPLETALO:
-        1. Leé el scope del token:
-               payload = request.state.token_payload
-               token_scope = payload.get("scope", "")
-        2. Si `required` NO está dentro de token_scope → 403 con un detail
-           claro ("El token no tiene el scope necesario para esta operación").
-        3. Si querés soportar varios scopes separados por espacio
-           ("read write"), pensá en dividir con .split().
-        4. Devolvé `current_user`.
-    """
+    """Factory de dependencia: exige que el TOKEN tenga `required` en su scope."""
     def checker(
         request: Request,
         current_user: Annotated[User, Depends(get_current_user)],
     ) -> User:
-        # ─────────────────────────────────────────────────────────────
-        # 🔓 TU CÓDIGO ACÁ:
-        #    payload = request.state.token_payload
-        #    token_scope = payload.get("scope", "")
-        #    if required not in token_scope.split():
-        #        raise HTTPException(status_code=403, detail=...)
-        # ─────────────────────────────────────────────────────────────
+        # viejo
+        # return current_user
+        # (No validaba los permisos delegados dentro del JWT)
+
+        # AUTORIZACION POR SCOPE):
+        # Leemos el claim "scope" del token que se guardo durante el login.
+        # Defensa: El scope vive en el token, no en el usuario. Limita lo que 
+        # puede hacer esta sesion especifica, independientemente del rol en la DB.
+        payload = request.state.token_payload
+        token_scope = payload.get("scope", "")
+        
+        if required not in token_scope.split():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="El token no tiene el scope necesario para esta operacion."
+            )
+            
         return current_user
     return checker

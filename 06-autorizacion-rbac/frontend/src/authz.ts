@@ -42,27 +42,41 @@ import type { DocumentRead, Role } from "./types";
  * un admin puede loguearse con scope "read" y quedar SOLO LECTURA.
  */
 export function scopeAllowsWrite(scope: string | undefined): boolean {
-  // 🔓 TODO: "read write" contiene "write"; "read" no.
-  //   pista: scope?.split(" ").includes("write")
-  return true;
+  // CODIGO VIEJO:
+  // return true;
+  
+  // CODIGO NUEVO (UX: Scope):
+  // Comprueba si el string del scope existe y si al separarlo por espacios incluye "write".
+  if (!scope) return false;
+  return scope.split(" ").includes("write");
 }
 
 /** ¿Puede ver el panel de usuarios (GET /api/users)? Solo admin. */
 export function canManageUsers(role: Role | undefined): boolean {
-  // 🔓 TODO: role === "admin"
-  return true;
+  // CODIGO VIEJO:
+  // return true;
+
+  // CODIGO NUEVO (UX: Deny-by-default):
+  // Oculta el panel a cualquier rol que no sea explícitamente "admin".
+  return role === "admin";
 }
 
 /** ¿Puede cambiar el rol de otro usuario (PATCH /users/{id}/role)? Solo admin. */
 export function canChangeRole(role: Role | undefined): boolean {
-  // 🔓 TODO: role === "admin"
-  return true;
+  // CODIGO VIEJO:
+  // return true;
+
+  // CODIGO NUEVO (UX: Deny-by-default):
+  return role === "admin";
 }
 
 /** ¿Puede BORRAR documentos (DELETE /api/documents/{id})? Solo admin. */
 export function canDelete(role: Role | undefined): boolean {
-  // 🔓 TODO: role === "admin"
-  return true;
+  // CODIGO VIEJO:
+  // return true;
+
+  // CODIGO NUEVO (UX: Deny-by-default):
+  return role === "admin";
 }
 
 /**
@@ -72,8 +86,12 @@ export function canDelete(role: Role | undefined): boolean {
  *   - un editor NO edita el privado de otro → false
  */
 export function canEdit(userId: number, doc: DocumentRead, role: Role | undefined): boolean {
-  // 🔓 TODO: doc.owner_id === userId || role === "admin"
-  return true;
+  // CODIGO VIEJO:
+  // return true;
+
+  // NUEVO (UX: Object-level y Rol):
+  // Habilita el botón si sos el dueño legítimo del documento o si sos administrador.
+  return doc.owner_id === userId || role === "admin";
 }
 
 /**
@@ -82,6 +100,9 @@ export function canEdit(userId: number, doc: DocumentRead, role: Role | undefine
  * por su scope "read", que también bloquea la UI con scopeAllowsWrite.
  */
 export function canPublish(userId: number, doc: DocumentRead, role: Role | undefined): boolean {
-  // 🔓 TODO: doc.owner_id === userId || role === "admin"
-  return true;
+  // CODIGO VIEJO:
+  // return true;
+
+  // CODIGO NUEVO (UX: Object-level y Rol):
+  return doc.owner_id === userId || role === "admin";
 }
